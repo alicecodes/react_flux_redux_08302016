@@ -2,50 +2,160 @@ import 'bootstrap-loader';
 import '../css/styles.scss';
 
 import keyMirror from 'key-mirror';
+import React from 'react';
+import ReactDOM from 'react-dom';
+import { createStore, combineReducers } from 'redux';
 
 const actionTypes = keyMirror({
-	REFRESH_WIDGETS: null,
-	APPEND_WIDGET: null,
-	DELETE_WIDGET: null
+	APPEND_ITEM: null,
+	DELETE_ITEM: null,
+	USER_LOGIN: null,
+	USER_LOGOUT: null
 });
 
 const deleteItems = (items, index, numOfItems) => {  
 	return items.slice(0, index).concat(items.slice(index + numOfItems));
 };
 
-const reducer = (state = [], action) => {
+const itemsReducer = (state = ['item 1', 'item 2'], action) => {
 
-	let newState;
+	let newState = state;
 
 	switch (action.type) {
-		case actionTypes.REFRESH_WIDGETS:
-			newState = state;
+		case actionTypes.APPEND_ITEM:
+			newState = state.concat(action.item);
 			break;
-		case actionTypes.APPEND_WIDGET:
-			newState = state.concat(action.widget);
-			break;
-		case actionTypes.DELETE_WIDGET:
-			newState = deleteItems(state, state.indexOf(state.find(widget => widget.id === action.widgetId)), 1);
+		case actionTypes.DELETE_ITEM:
+			newState = deleteItems(state, state.indexOf(state.find(item => item.id === action.itemId))  , 1);
 			break;
 	}	
 
-	console.log('new state...');
-	console.log(JSON.stringify(newState));
-
 	return newState;
+
 };
 
-const refreshWidgetsAction = () => ({ type: actionTypes.REFRESH_WIDGETS });
-const appendWidgetAction = widget => ({ type: actionTypes.APPEND_WIDGET, widget });
-const deleteWidgetAction = widgetId => ({ type: actionTypes.DELETE_WIDGET, widgetId });
+const userReducer = (state = null, action) => {
 
-[
-	appendWidgetAction({ id: 1, name: 'Widget 1', color:'red', size:'large', quantity:2 }),
-	appendWidgetAction({ id: 2, name: 'Widget 2', color:'blue', size:'small', quantity:4 }),
-	deleteWidgetAction(1),
-	appendWidgetAction({ id: 3, name: 'Widget 3', color:'yellow', size:'medium', quantity:5 }),
-	refreshWidgetsAction()
-].reduce(reducer, undefined);
+	let newState = state;
+
+	switch (action.type) {
+		case actionTypes.USER_LOGIN:
+			newState = action.user;
+			break;
+		case actionTypes.USER_LOGOUT:
+			newState = null;
+			break;
+	}	
+
+	return newState;
+
+};
+
+const userLoginAction = user => ({ type: actionTypes.USER_LOGIN, user });
+const userLogoutAction = () => ({ type: actionTypes.USER_LOGOUT, user: null });
+const appendItemAction = item => ({ type: actionTypes.APPEND_ITEM, item });
+const deleteItemAction = itemId => ({ type: actionTypes.DELETE_ITEM, itemId });
+
+class ItemList extends React.Component {
+
+	render() {
+		return <ul>{this.props.items.map(i => <li key={i}>{i}</li>)}</ul>;	
+	}
+
+}
+
+ItemList.propTypes = {
+	items: React.PropTypes.arrayOf(React.PropTypes.string).isRequired
+};
+
+class ItemForm extends React.Component {
+
+	constructor(props) {
+		super(props);
+
+		this.state = {
+			newItem: ''
+		};
+
+		this.onChange = this.onChange.bind(this);
+		this.onClick = this.onClick.bind(this);
+	}
+
+	onChange(e) {
+		this.setState({ [e.target.name]: e.target.value });
+	}
+
+	onClick() {
+		this.props.addNewItem(this.state.newItem);
+
+		this.setState({
+			newItem: ''
+		});
+	}
+
+	render() {
+		return <form>
+			<label>New Item:</label>
+			<input type="text" name="newItem"
+				value={this.state.newItem} onChange={this.onChange} />
+			<button type="button" onClick={this.onClick}>Add New Item</button>
+		</form>;
+	}
+
+}
+
+ItemForm.propTypes = {
+	addNewItem: React.PropTypes.func.isRequired
+};
+
+class ItemsApp extends React.Component {
+
+	constructor(props) {
+		super(props);
+
+		this.state = {
+			items: []
+		};
+
+		this.addNewItem = this.addNewItem.bind(this);
+	}
+
+	componentDidMount() {
+		this.unsubscribe = this.props.store.subscribe(() => {
+			this.setState(this.props.store.getState());
+		});
+
+		this.setState(this.props.store.getState());
+	}
+
+	componentWillUnmount() {
+		this.unsubscribe();
+	}
+
+
+	addNewItem(newItem) {
+		this.props.store.dispatch(appendItemAction(newItem));
+	}
+
+	render() {
+
+		return <div>
+			<ItemList items={this.state.items} />
+			<ItemForm addNewItem={this.addNewItem} />
+		</div>;
+
+	}
+
+}
+
+ItemsApp.propTypes = {
+	store: React.PropTypes.object.isRequired
+};
+
+const store = createStore(combineReducers({
+	items: itemsReducer, user: userReducer }));
+
+ReactDOM.render(<ItemsApp store={store} />, document.querySelector('main'));
 
 
 
