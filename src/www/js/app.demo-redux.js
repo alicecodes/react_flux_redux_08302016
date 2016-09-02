@@ -2,6 +2,9 @@ import 'bootstrap-loader';
 import '../css/styles.scss';
 
 import keyMirror from 'key-mirror';
+import React from 'react';
+import ReactDOM from 'react-dom';
+import { createStore, combineReducers } from 'redux';
 
 const actionTypes = keyMirror({
 	APPEND_ITEM: null,
@@ -14,7 +17,7 @@ const deleteItems = (items, index, numOfItems) => {
 	return items.slice(0, index).concat(items.slice(index + numOfItems));
 };
 
-const itemsReducer = (state = [], action) => {
+const itemsReducer = (state = ['item 1', 'item 2'], action) => {
 
 	let newState = state;
 
@@ -48,63 +51,111 @@ const userReducer = (state = null, action) => {
 
 };
 
-const combine = (reducers) => {
-	return (state = {}, action) => {
-		return Object.keys(reducers).reduce((newState, key) => {
-			newState[key] = reducers[key](newState[key], action);
-			return newState;
-		}, state);
-	};
-};
-
-const reducer = (...params) => {
-
-	const newState = combine({ items: itemsReducer, user: userReducer })(...params);
-
-	console.log('New State -----');
-	console.log(JSON.stringify(newState));	
-
-	return newState;
-};
-
-
-
-
-// const reducer = (state = { items: [], user: null }, action) => {
-
-// 	let newState = state;
-
-// 	newState.items = itemsReducer(newState.items, action);
-// 	newState.user = userReducer(newState.user, action);
-
-// 	console.log('New State -----');
-// 	console.log(JSON.stringify(newState));
-
-// 	return newState;
-// };
-
 const userLoginAction = user => ({ type: actionTypes.USER_LOGIN, user });
 const userLogoutAction = () => ({ type: actionTypes.USER_LOGOUT, user: null });
 const appendItemAction = item => ({ type: actionTypes.APPEND_ITEM, item });
 const deleteItemAction = itemId => ({ type: actionTypes.DELETE_ITEM, itemId });
 
-[
-	userLoginAction({ username: 'bob' }),
-	appendItemAction({ id: 1, name: 'Item 1'}),
-	appendItemAction({ id: 2, name: 'Item 2'}),
-	deleteItemAction(1),
-	appendItemAction({ id: 3, name: 'Item 3'}),
-	userLogoutAction()
-].reduce(reducer, undefined);
+class ItemList extends React.Component {
+
+	render() {
+		return <ul>{this.props.items.map(i => <li key={i}>{i}</li>)}</ul>;	
+	}
+
+}
+
+ItemList.propTypes = {
+	items: React.PropTypes.arrayOf(React.PropTypes.string).isRequired
+};
+
+class ItemForm extends React.Component {
+
+	constructor(props) {
+		super(props);
+
+		this.state = {
+			newItem: ''
+		};
+
+		this.onChange = this.onChange.bind(this);
+		this.onClick = this.onClick.bind(this);
+	}
+
+	onChange(e) {
+		this.setState({ [e.target.name]: e.target.value });
+	}
+
+	onClick() {
+		this.props.addNewItem(this.state.newItem);
+
+		this.setState({
+			newItem: ''
+		});
+	}
+
+	render() {
+		return <form>
+			<label>New Item:</label>
+			<input type="text" name="newItem"
+				value={this.state.newItem} onChange={this.onChange} />
+			<button type="button" onClick={this.onClick}>Add New Item</button>
+		</form>;
+	}
+
+}
+
+ItemForm.propTypes = {
+	addNewItem: React.PropTypes.func.isRequired
+};
+
+class ItemsApp extends React.Component {
+
+	constructor(props) {
+		super(props);
+
+		this.state = {
+			items: []
+		};
+
+		this.addNewItem = this.addNewItem.bind(this);
+	}
+
+	componentDidMount() {
+		this.unsubscribe = this.props.store.subscribe(() => {
+			this.setState(this.props.store.getState());
+		});
+
+		this.setState(this.props.store.getState());
+	}
+
+	componentWillUnmount() {
+		this.unsubscribe();
+	}
 
 
+	addNewItem(newItem) {
+		this.props.store.dispatch(appendItemAction(newItem));
+	}
 
-// const v = [1,2,3,4,5].reduce(function(state, action) {
-// 	console.log('state: ', state, ', action:', action);
-// 	return state + action;
-// }, 0);
+	render() {
 
-// console.log(v);
+		return <div>
+			<ItemList items={this.state.items} />
+			<ItemForm addNewItem={this.addNewItem} />
+		</div>;
+
+	}
+
+}
+
+ItemsApp.propTypes = {
+	store: React.PropTypes.object.isRequired
+};
+
+const store = createStore(combineReducers({
+	items: itemsReducer, user: userReducer }));
+
+ReactDOM.render(<ItemsApp store={store} />, document.querySelector('main'));
 
 
 
