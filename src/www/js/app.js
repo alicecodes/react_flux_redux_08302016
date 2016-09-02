@@ -6,46 +6,88 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { createStore } from 'redux';
 
-const widgets = [
-	{
-		"_id": "1",
-		"name": "Small Red Widget",
-		"color": "red",
-		"size": "small",
-		"quantity": 2,
-	}
-];
-
-let lastWidgetId = 1;
-
 const actionTypes = keyMirror({
 	REFRESH_WIDGETS: null,
+	REFRESH_WIDGETS_DONE: null,
 	APPEND_WIDGET: null,
-	DELETE_WIDGET: null
+	DELETE_WIDGET: null,
 });
-
-const deleteItems = (items, index, numOfItems) => {  
-	return items.slice(0, index).concat(items.slice(index + numOfItems));
-};
 
 const reducer = (state = [], action) => {
 
 	switch (action.type) {
-		case actionTypes.REFRESH_WIDGETS:
-			return state;
-		case actionTypes.APPEND_WIDGET:
-			return state.concat(action.widget);
-		case actionTypes.DELETE_WIDGET:
-			return deleteItems(state, state.indexOf(state.find(widget => widget.id === action.widgetId)), 1);
+		case actionTypes.REFRESH_WIDGETS_DONE:
+			return action.widgets;
 	}	
 
 	return state;
 
 };
 
-const refreshWidgetsAction = () => ({ type: actionTypes.REFRESH_WIDGETS });
-const appendWidgetAction = widget => ({ type: actionTypes.APPEND_WIDGET, widget });
-const deleteWidgetAction = widgetId => ({ type: actionTypes.DELETE_WIDGET, widgetId });
+const store = createStore(reducer);
+
+const refreshWidgetsAction = () => {
+
+	fetch('/api/widgets').then(res => res.json()).then(results => {
+		store.dispatch({ type: actionTypes.REFRESH_WIDGETS_DONE, widgets: results });
+	});
+
+	return { type: actionTypes.REFRESH_WIDGETS };
+};
+
+const appendWidgetAction = widget => {
+
+	fetch('/api/widgets', {
+		headers: new Headers({ 'Content-Type': 'application/json' }),
+		method: 'POST',
+		body: JSON.stringify(widget)
+	}).then(res => res.json()).then(results => {
+		store.dispatch(refreshWidgetsAction());
+	});
+
+	return { type: actionTypes.APPEND_WIDGET };
+
+};
+
+const deleteWidgetAction = widgetId => {
+
+	fetch('/api/widgets/' + encodeURIComponent(widgetId), {
+		method: 'DELETE',
+	}).then(res => res.json()).then(() => {
+		store.dispatch(refreshWidgetsAction());
+	});
+
+	return { type: actionTypes.DELETE_WIDGET };
+
+};
+
+class WidgetRow extends React.Component {
+
+	constructor(props) {
+		super(props);
+	
+		this.deleteWidget = this.deleteWidget.bind(this);
+	}
+
+	deleteWidget() {
+		this.props.deleteWidget(this.props.widget._id);
+	}
+
+	render() {
+		return <tr>
+			<td>{this.props.widget.name}</td>
+			<td>{this.props.widget.color}</td>
+			<td>{this.props.widget.size}</td>
+			<td>{this.props.widget.quantity}</td>
+			<td><button type="button" onClick={this.deleteWidget}>Delete</button></td>
+		</tr>;
+	}
+}
+
+WidgetRow.propTypes = {
+	widget: React.PropTypes.object.isRequired,
+	deleteWidget: React.PropTypes.func.isRequired
+};
 
 class WidgetTable extends React.Component {
 
@@ -57,16 +99,12 @@ class WidgetTable extends React.Component {
 					<th>Color</th>
 					<th>Size</th>
 					<th>Quantity</th>
+					<th>Action</th>
 				</tr>
 			</thead>
 			<tbody>
 				{this.props.widgets.map(widget =>
-					<tr key={widget._id}>
-						<td>{widget.name}</td>
-						<td>{widget.color}</td>
-						<td>{widget.size}</td>
-						<td>{widget.quantity}</td>
-					</tr>
+					<WidgetRow key={widget._id} widget={widget} deleteWidget={this.props.deleteWidget} />
 				)}
 			</tbody>
 		</table>;	
@@ -75,7 +113,8 @@ class WidgetTable extends React.Component {
 }
 
 WidgetTable.propTypes = {
-	widgets: React.PropTypes.arrayOf(React.PropTypes.object).isRequired
+	widgets: React.PropTypes.arrayOf(React.PropTypes.object).isRequired,
+	deleteWidget: React.PropTypes.func.isRequired
 };
 
 class WidgetForm extends React.Component {
@@ -158,6 +197,8 @@ class WidgetsApp extends React.Component {
 		};
 
 		this.addNewWidget = this.addNewWidget.bind(this);
+		this.deleteWidget = this.deleteWidget.bind(this);
+		this.refreshWidgets = this.refreshWidgets.bind(this);
 	}
 
 	componentDidMount() {
@@ -165,24 +206,30 @@ class WidgetsApp extends React.Component {
 			this.setState({ widgets: this.props.store.getState() });
 		});
 
-		this.setState({ widgets: this.props.store.getState() });
+		this.props.store.dispatch(refreshWidgetsAction());
 	}
 
 	componentWillUnmount() {
 		this.unsubscribe();
 	}
 
-
 	addNewWidget(newWidget) {
-		newWidget._id = ++lastWidgetId; 
-		console.log(newWidget);
 		this.props.store.dispatch(appendWidgetAction(newWidget));
+	}
+
+	deleteWidget(widgetId) {
+		this.props.store.dispatch(deleteWidgetAction(widgetId));
+	}
+
+	refreshWidgets() {
+		this.props.store.dispatch(refreshWidgetsAction());
 	}
 
 	render() {
 
 		return <div>
-			<WidgetTable widgets={this.state.widgets} />
+			<button type="button" onClick={this.refreshWidgets}>Refresh</button>
+			<WidgetTable widgets={this.state.widgets} deleteWidget={this.deleteWidget} />
 			<WidgetForm addNewWidget={this.addNewWidget} />
 		</div>;
 
@@ -194,7 +241,7 @@ WidgetsApp.propTypes = {
 	store: React.PropTypes.object.isRequired
 };
 
-ReactDOM.render(<WidgetsApp store={createStore(reducer, widgets)} />, document.querySelector('main'));
+ReactDOM.render(<WidgetsApp store={store} />, document.querySelector('main'));
 
 
 
